@@ -4,39 +4,59 @@
   <meta charset="UTF-8">
   <title>Electricity Schedule Dnipro Group 5.2</title>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <!-- Font Awesome CDN -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"/>
 
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
+    body { font-family: Arial, sans-serif; padding: 10px; }
     .table-container { overflow-x: auto; margin: 0 auto; max-width: 100%; }
-    table { border-collapse: collapse; width: 100%; min-width: 800px; }
-    th, td { border: 1px solid #999; text-align: center; padding: 4px; }
-    th { background-color: #f0f0f0; font-size: 12px; }
-    td.hour-cell { padding: 0; width: 40px; height: 40px; position: relative; }
-    .half { height: 50%; width: 100%; display: flex; align-items: center; justify-content: center; }
-    .half.top { border-bottom: 1px solid #ccc; }
+    table { border-collapse: collapse; width: auto; }
+    th, td { border: 1px solid #999; text-align: center; padding: 2px; }
+    th { background-color: #f0f0f0; font-size: 11px; }
+    td.hour-cell {
+      padding: 0;
+      width: 180px; /* width for icon+timer */
+      height: 25px;
+      display: flex;
+      position: relative;
+      border-left: 1px solid #999;
+    }
+    .half {
+      width: 50%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      box-sizing: border-box;
+      border-left: 1px solid #ccc;
+      padding: 0 2px;
+      transition: background-color 0.2s;
+      position: relative;
+    }
+    .half:first-child { border-left: none; }
     .power { background-color: #e8ffe8; }
-    .no-power { background-color: #ffe5e5; }
-    .half i { font-size: 14px; } /* icon size */
+    .no-power { background-color: #f4acac; }
+    .current-half { background-color: #fff176 !important; box-shadow: 0 0 0 1.4px #00f inset; }
+    .half i { font-size: 12px; margin-right: 2px; }
+    .timer { font-size: 10px; margin-left: 2px; }
     .half:hover::after {
       content: attr(data-tip);
       position: absolute;
       background: #222;
       color: #fff;
-      padding: 4px 6px;
+      padding: 2px 4px;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 11px;
       white-space: nowrap;
-      top: -5px;
+      top: -20px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 10;
     }
     @media (max-width: 600px) {
-      td.hour-cell { width: 30px; height: 30px; }
+      td.hour-cell { width: 140px; height: 20px; }
       th { font-size: 10px; }
-      .half i { font-size: 12px; }
+      .half i, .timer { font-size: 10px; }
     }
   </style>
 </head>
@@ -56,11 +76,7 @@
     fetch(proxyUrl)
       .then(res => res.json())
       .then(response => {
-
-        const scheduleComponent = response.components.find(
-          c => c.template_name === "electricity-outages-daily-schedule"
-        );
-
+        const scheduleComponent = response.components.find(c => c.template_name === "electricity-outages-daily-schedule");
         if (!scheduleComponent || !scheduleComponent.schedule) {
           $("#electricity-schedule").html("<tr><td>Schedule not found</td></tr>");
           return;
@@ -68,7 +84,6 @@
 
         const region = "dnipro";
         const group = "group_5.2";
-
         if (!scheduleComponent.schedule[region] || !scheduleComponent.schedule[region][group]) {
           $("#electricity-schedule").html("<tr><td>Schedule not available</td></tr>");
           return;
@@ -80,14 +95,21 @@
 
         const $table = $("#electricity-schedule");
 
-        // Header row
-        let header = "<tr><th>Hour</th>";
-        for (let h = 0; h < 24; h++) header += `<th>${h}</th>`;
-        header += "</tr>";
-        $table.append(header);
+        // Header
+        $table.append("<tr><th>Hour</th><th>Schedule</th></tr>");
 
-        // Single row for today
-        let row = "<tr><th>Today</th>";
+        const now = new Date();
+        let currentHour = now.getHours();
+        let currentMinute = now.getMinutes();
+        let isFirstHalf = currentMinute < 30;
+
+        function formatCountdown(ms) {
+          const m = Math.floor(ms / 60000);
+          const s = Math.floor((ms % 60000) / 1000);
+          return m + "m " + s + "s";
+        }
+
+        const halfCells = [];
 
         for (let hour = 0; hour < 24; hour++) {
           const h1_start = hour, h1_end = hour + 0.5;
@@ -96,29 +118,65 @@
           const half1_outage = todaySchedule.some(slot => h1_start < slot.end && h1_end > slot.start);
           const half2_outage = todaySchedule.some(slot => h2_start < slot.end && h2_end > slot.start);
 
-          const h1_tip = `${String(hour).padStart(2, "0")}:00–${String(hour).padStart(2, "0")}:30 • ${half1_outage ? "OFF" : "ON"}`;
-          const h2_tip = `${String(hour).padStart(2, "0")}:30–${String(hour+1).padStart(2, "0")}:00 • ${half2_outage ? "OFF" : "ON"}`;
+          const h1_tip = `${String(hour).padStart(2,"0")}:00–${String(hour).padStart(2,"0")}:30 • ${half1_outage ? "OFF" : "ON"}`;
+          const h2_tip = `${String(hour).padStart(2,"0")}:30–${String(hour+1).padStart(2,"0")}:00 • ${half2_outage ? "OFF" : "ON"}`;
 
-          row += `
-        <td class="hour-cell">
-          <div class="half top ${half1_outage ? "no-power" : "power"}" data-tip="${h1_tip}">
-            <i class="${half1_outage ? 'fa-solid fa-xmark' : 'fa-solid fa-bolt'}"></i>
-          </div>
-          <div class="half ${half2_outage ? "no-power" : "power"}" data-tip="${h2_tip}">
-            <i class="${half2_outage ? 'fa-solid fa-xmark' : 'fa-solid fa-bolt'}"></i>
-          </div>
-        </td>`;
+          const h1_class = half1_outage ? 'no-power' : 'power';
+          const h2_class = half2_outage ? 'no-power' : 'power';
+          const currentH1 = hour === currentHour && isFirstHalf ? "current-half" : "";
+          const currentH2 = hour === currentHour && !isFirstHalf ? "current-half" : "";
+
+          const cell = `<td class="hour-cell">
+                        <div class="half ${h1_class} ${currentH1}" data-tip="${h1_tip}">
+                          <i class="${half1_outage ? 'fa-solid fa-xmark' : 'fa-solid fa-bolt'}"></i>
+                          <span class="timer"></span>
+                        </div>
+                        <div class="half ${h2_class} ${currentH2}" data-tip="${h2_tip}">
+                          <i class="${half2_outage ? 'fa-solid fa-xmark' : 'fa-solid fa-bolt'}"></i>
+                          <span class="timer"></span>
+                        </div>
+                      </td>`;
+
+          $table.append(`<tr><th>${hour}</th>${cell}</tr>`);
+
+          // store reference to the halves
+          halfCells.push({hour, h1: $table.find('tr').last().find('.half').eq(0), h2: $table.find('tr').last().find('.half').eq(1)});
         }
 
-        row += "</tr>";
-        $table.append(row);
+        function updateTimer() {
+          const now = new Date();
+          const currentHour = now.getHours();
+          const currentMinute = now.getMinutes();
+          const currentSecond = now.getSeconds();
+
+          halfCells.forEach(hc => {
+            hc.h1.find('.timer').text('');
+            hc.h2.find('.timer').text('');
+            hc.h1.removeClass('current-half');
+            hc.h2.removeClass('current-half');
+
+            if (hc.hour === currentHour) {
+              if (currentMinute < 30) {
+                hc.h1.addClass('current-half');
+                const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hc.hour, 30, 0) - now;
+                hc.h1.find('.timer').text(formatCountdown(endMs));
+              } else {
+                hc.h2.addClass('current-half');
+                const endMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hc.hour+1, 0, 0) - now;
+                hc.h2.find('.timer').text(formatCountdown(endMs));
+              }
+            }
+          });
+        }
+
+        updateTimer();
+        setInterval(updateTimer, 1000);
 
       })
       .catch(err => {
         console.error("Failed to fetch schedule:", err);
         $("#electricity-schedule").html("<tr><td>Failed to load schedule</td></tr>");
       });
-
   });
 </script>
 
