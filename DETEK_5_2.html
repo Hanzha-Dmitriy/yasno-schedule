@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Electricity Schedule Dnipro Group 5.2</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px auto; }
+    th, td { border: 1px solid #999; text-align: center; }
+    th { background-color: #f0f0f0; padding: 6px; }
+
+    td.hour-cell {
+      padding: 0;
+      width: 40px;
+      height: 40px;
+      position: relative;
+    }
+
+    .half {
+      height: 50%;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .half.top { border-bottom: 1px solid #ccc; }
+    .power { background-color: #d4ffd4; }
+    .no-power { background-color: #ffd4d4; }
+
+    /* Tooltip */
+    .half:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      background: #222;
+      color: #fff;
+      padding: 4px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+      top: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+    }
+  </style>
+</head>
+
+<body>
+
+<h2>Electricity Schedule for Dnipro – Group 5.2</h2>
+
+<table id="electricity-schedule"></table>
+
+<script>
+  $(document).ready(function() {
+
+    const apiUrl = "https://api.yasno.com.ua/api/v1/pages/home/schedule-turn-off-electricity";
+    const proxyUrl = "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(apiUrl);
+
+    fetch(proxyUrl)
+      .then(res => res.json())
+      .then(response => {
+
+        const scheduleComponent = response.components.find(
+          c => c.template_name === "electricity-outages-daily-schedule"
+        );
+
+        if (!scheduleComponent || !scheduleComponent.schedule) {
+          $("#electricity-schedule").html("<tr><td>Schedule not found</td></tr>");
+          return;
+        }
+
+        const region = "dnipro";
+        const group = "group_5.2";
+
+        if (!scheduleComponent.schedule[region] ||
+          !scheduleComponent.schedule[region][group]) {
+          $("#electricity-schedule").html("<tr><td>Schedule not available</td></tr>");
+          return;
+        }
+
+        // JS day -> API day
+        const jsDay = new Date().getDay();
+        const apiDay = (jsDay + 6) % 7;
+
+        const todaySchedule = scheduleComponent.schedule[region][group][apiDay];
+
+        const $table = $("#electricity-schedule");
+
+        // Header row
+        let header = "<tr><th>Hour</th>";
+        for (let h = 0; h < 24; h++) header += `<th>${h}</th>`;
+        header += "</tr>";
+        $table.append(header);
+
+        // ONE SINGLE ROW
+        let row = "<tr><th>Today</th>";
+
+        for (let hour = 0; hour < 24; hour++) {
+
+          // Half intervals
+          const half1_start = hour + 0.0, half1_end = hour + 0.5;
+          const half2_start = hour + 0.5, half2_end = hour + 1.0;
+
+          const half1_outage = todaySchedule.some(slot => half1_start < slot.end && half1_end > slot.start);
+          const half2_outage = todaySchedule.some(slot => half2_start < slot.end && half2_end > slot.start);
+
+          const h1_tip =
+            `${String(hour).padStart(2, "0")}:00 – ${String(hour).padStart(2, "0")}:30 • ${half1_outage ? "OFF" : "ON"}`;
+
+          const h2_tip =
+            `${String(hour).padStart(2, "0")}:30 – ${String(hour+1).padStart(2, "0")}:00 • ${half2_outage ? "OFF" : "ON"}`;
+
+          row += `
+          <td class="hour-cell">
+            <div class="half top ${half1_outage ? "no-power" : "power"}" data-tip="${h1_tip}"></div>
+            <div class="half ${half2_outage ? "no-power" : "power"}" data-tip="${h2_tip}"></div>
+          </td>`;
+        }
+
+        row += "</tr>";
+        $table.append(row);
+
+      })
+      .catch(err => {
+        console.error("Failed to fetch schedule:", err);
+        $("#electricity-schedule").html("<tr><td>Failed to load schedule</td></tr>");
+      });
+
+  });
+</script>
+
+</body>
+</html>
